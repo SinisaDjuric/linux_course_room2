@@ -21,7 +21,6 @@ static sem_t semEncrypted;
 static sem_t semDecrypted;
 static sem_t semFinishSignal;
 static sem_t semSent;
-
 static pthread_mutex_t deviceAccess;
 
 static int file;
