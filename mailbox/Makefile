@@ -1,7 +1,7 @@
 #embedded linux course
 
 CC:=gcc
-CFLAGS=O0 -Wall
+CFLAGS=-O0 -Wall
 LIBS=-lpthread
 INCLUDE=-I include/
 SRC_PATH=src/
