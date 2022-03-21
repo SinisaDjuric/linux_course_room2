@@ -7,8 +7,10 @@ INCLUDE = -I include
 SRC_PATH = src/
 OBJ_PATH = build/
 
-SRC=$(wildcard *.c)
-OBJS=$(SRC:.c=.o)
+SRC=$(wildcard $(SRC_PATH)*.c)
+SRC_TMP=$(notdir $(SRC))
+OBJS_TMP=$(SRC_TMP:.c=.o)
+OBJS=$(addprefix $(OBJ_PATH), $(OBJS_TMP))
 
 all: app
 

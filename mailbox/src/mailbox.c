@@ -29,6 +29,27 @@ static int data_len;
 static int crc_len;
 static char file_name[] = "/dev/mailbox";
 
+/* Read 1 character - echo defines echo mode */
+char getch_(int echo) 
+{
+    char ch;
+    initTermios(echo);
+    ch = getchar();
+    resetTermios();
+    return ch;
+}
+
+/* Read 1 character without echo */
+char getch(void) 
+{
+    return getch_(0);
+}
+
+/* Read 1 character with echo */
+char getche(void) 
+{
+    return getch_(1);
+}
 /* encrypter thread routine. */
 void* encrypter (void *param)
 {
