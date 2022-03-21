@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include "timer_event.h"
 
 
 #define BUFF_MAX_SIZE (50)
@@ -131,17 +132,34 @@ void* sender (void *param)
             pthread_mutex_unlock(&deviceAccess);
 
             printf("Decrypted message: %s", data);
-            /* Terminate thread; Signal the semaphore three times
-            in order to notify all three threads. */
-            sem_post(&semFinishSignal);
-            sem_post(&semFinishSignal);
-            sem_post(&semFinishSignal);
+            /* Get char when keypressed. */
+            c = getch();
+
+            /* In case of q or Q char, signal both
+               threads (including this one) to terminate. */
+            if (c == 'q' || c == 'Q')
+            {
+                /* Terminate thread; Signal the semaphore three times
+                in order to notify all three threads. */
+                sem_post(&semFinishSignal);
+                sem_post(&semFinishSignal);
+                sem_post(&semFinishSignal);
+            }
         }
     }
 
     return 0;
 }
-            
+
+/* Timer callback being caller on every 2 seconds. */
+void* send_new_mail (void *param)
+{
+    sem_post(&semSent);
+
+    return 0;
+}
+
+
 /* Main thread creates two additinoal threads (the encrypter and the decrypter) and waits them to terminate. */
 int main (int argc, char *argv[])
 {
@@ -149,6 +167,10 @@ int main (int argc, char *argv[])
     pthread_t hEncrypter;
     pthread_t hDecrypter;
     pthread_t hSender;
+
+    /* Timer ID. */
+    timer_event_t hPrintStateTimer;
+
 
 	if (argc != 2) {
 		fprintf(stderr, "mailbox: wrong number of arguments;\n");
@@ -173,10 +195,16 @@ int main (int argc, char *argv[])
     pthread_create(&hDecrypter, NULL, decrypter, 0);
     pthread_create(&hSender, NULL, sender, 0);
 
+    /* Create the timer event for send_new_mail callback function. */
+    timer_event_set(&hPrintStateTimer, 2000, send_new_mail, 0, TE_KIND_REPETITIVE);
+
     /* Join threads (wait them to terminate) */
     pthread_join(hDecrypter, NULL);
     pthread_join(hEncrypter, NULL);
     pthread_join(hSender, NULL);
+
+    /* Stop the timer. */
+    timer_event_kill(hPrintStateTimer);
 
     /* Release resources. */
     sem_destroy(&semEncrypted);
