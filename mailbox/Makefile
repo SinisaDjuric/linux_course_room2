@@ -1,9 +1,9 @@
 #embedded linux course
 
 CC:=gcc
-CFLAGS= O0 -Wall
+CFLAGS=O0 -Wall
 LIBS=-lpthread
-INCLUDE=-I include
+INCLUDE=-I include/
 SRC_PATH=src/
 OBJ_PATH=build/
 
@@ -20,7 +20,7 @@ make_dir:
 $(OBJ_PATH)%.o: $(SRC_PATH)%.c
 	$(CC) $(CFLAGS) -c $(INCLUDE) $< -o $@
 
-app: $(OBJ_PATH)$(OBJS)
+app: $(OBJS)
 	$(CC) $^ -o $(OBJ_PATH)$@ $(LIBS)
 
 clean:
