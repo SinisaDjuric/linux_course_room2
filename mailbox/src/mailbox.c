@@ -7,8 +7,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 #include "timer_event.h"
-
 
 #define BUFF_MAX_SIZE (50)
 #define SLEEPING_TIME (2000000)
@@ -28,6 +28,24 @@ static int file;
 static int data_len;
 static int crc_len;
 static char file_name[] = "/dev/mailbox";
+
+static struct termios old, new;
+
+/* Initialize new terminal i/o settings */
+void initTermios(int echo) 
+{
+    tcgetattr(0, &old); /* grab old terminal i/o settings */
+    new = old; /* make new settings same as old settings */
+    new.c_lflag &= ~ICANON; /* disable buffered i/o */
+    new.c_lflag &= echo ? ECHO : ~ECHO; /* set echo mode */
+    tcsetattr(0, TCSANOW, &new); /* use these new terminal i/o settings now */
+}
+
+/* Restore old terminal i/o settings */
+void resetTermios(void) 
+{
+    tcsetattr(0, TCSANOW, &old);
+}
 
 /* Read 1 character - echo defines echo mode */
 char getch_(int echo) 
