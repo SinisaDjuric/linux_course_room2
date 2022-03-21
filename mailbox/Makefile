@@ -12,16 +12,20 @@ SRC_TMP=$(notdir $(SRC))
 OBJS_TMP=$(SRC_TMP:.c=.o)
 OBJS=$(addprefix $(OBJ_PATH), $(OBJS_TMP))
 
-all: app
+all: make_dir app
+
+make_dir:
+    test -d $(OBJ_PATH) || mkdir $(OBJ_PATH)
 
 $(OBJ_PATH)%.o: $(SRC_PATH)%.c
 	$(CC) $(CFLAGS) -c $(INCLUDE) $< -o $@
 
-$(OBJ_PATH)app: $(OBJ_PATH)$(OBJS)
-	$(CC) $^ -o $@ $(LIBS)
+app: $(OBJ_PATH)$(OBJS)
+	$(CC) $^ -o $(OBJ_PATH)$@ $(LIBS)
 
 clean:
 	rm -f *.o app
+    rm -r $(OBJ_PATH)
 
 .PHONY: all clean
 

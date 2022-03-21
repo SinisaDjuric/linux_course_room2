@@ -154,6 +154,8 @@ void* sender (void *param)
 {
 	int ret_val = 0;
     char data[BUFF_MAX_SIZE + 1];
+    char c;
+
     while (1)
     {
         if (sem_trywait(&semFinishSignal) == 0)
@@ -225,7 +227,7 @@ int main (int argc, char *argv[])
 
     /* Initialise mutex. */
     pthread_mutex_init(&deviceAccess, NULL);
-    if (file = open("/dev/mailbox", O_RDWR) < 0){
+    if ((file = open("/dev/mailbox", O_RDWR)) < 0){
 		fprintf(stderr, "Error opening file %s\n", argv[1]);
 		return -1;
   	}
