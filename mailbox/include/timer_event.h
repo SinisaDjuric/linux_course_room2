@@ -5,19 +5,19 @@ typedef void* (*func_pointer_t)(void*);
 
 typedef enum TE_KIND
 {
-	TE_KIND_ONCE,
-	TE_KIND_REPETITIVE,
+    TE_KIND_ONCE,
+    TE_KIND_REPETITIVE,
 } timer_event_kind_t;
 
 typedef struct timer_event
 {
-	func_pointer_t func;
-	void* func_arg;
-	timer_event_kind_t kind;
-	int abs_time;
+    func_pointer_t func;
+    void* func_arg;
+    timer_event_kind_t kind;
+    int abs_time;
 
-	int rel_time;
-	struct timer_event* next;
+    int rel_time;
+    struct timer_event* next;
 } timer_event_s_t;
 
 typedef timer_event_s_t* timer_event_t;

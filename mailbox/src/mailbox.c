@@ -27,14 +27,14 @@ static pthread_mutex_t deviceAccess;
 static int file;
 static int data_len;
 static int crc_len;
-static char file_name[] = "/dev/mailbox";
+static char file_name[] = "/dev/encrypter";
+static int stop = 0;
 
 /* encrypter thread routine. */
 void* encrypter (void *param)
 {
     int key;
     int i;
-	int ret_val = 0;
     char data[BUFF_MAX_SIZE + 1];
     static char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789,.-#'?!";
     int err_inj = *(int*)param;
@@ -61,11 +61,15 @@ void* encrypter (void *param)
             data[i] = '\n';
 
             pthread_mutex_lock(&deviceAccess);
-            if (ioctl(file, ENCRYPT, err_inj)) {
+            if (ioctl(file, ENCRYPT, err_inj)) 
+            {
                 fprintf(stderr, "Error sending the ioctl command %d to file %s\n", ENCRYPT, file_name);
             }
             /* Write to /dev/mailbox device. */
-            ret_val = write(file, data, data_len);
+            if (write(file, data, data_len))
+            {
+                fprintf(stderr, "Error writting data to file %s\n", file_name);
+            }
             pthread_mutex_unlock(&deviceAccess);
 
             sem_post(&semEncrypted);
@@ -78,9 +82,9 @@ void* encrypter (void *param)
 /* decrypter thread routine. */
 void* decrypter (void *param)
 {
-	int ret_val = 0;
     char data[BUFF_MAX_SIZE + 1];
     int err_inj = *(int*)param;
+
     while (1)
     {
         if (sem_trywait(&semFinishSignal) == 0)
@@ -93,9 +97,13 @@ void* decrypter (void *param)
             /* Access the ring buffer. */
             pthread_mutex_lock(&deviceAccess);
             /* Read from /dev/encrypter device. */
-            ret_val = read(file, data, data_len + crc_len);
+            if (read(file, data, data_len + crc_len))
+            {
+                fprintf(stderr, "Error reading data from file %s\n", file_name);
+            }
 
-            if (ioctl(file, DECRYPT, err_inj)) {
+            if (ioctl(file, DECRYPT, err_inj)) 
+            {
                 fprintf(stderr, "Error sending the ioctl command %d to file %s\n", DECRYPT, file_name);
             }
 
@@ -113,9 +121,7 @@ void* decrypter (void *param)
 /* sender thread routine. */
 void* sender (void *param)
 {
-	int ret_val = 0;
     char data[BUFF_MAX_SIZE + 1];
-    char c;
 
     while (1)
     {
@@ -129,20 +135,21 @@ void* sender (void *param)
             /* Access the ring buffer. */
             pthread_mutex_lock(&deviceAccess);
             /* Read from /dev/encrypter device. */
-            ret_val = read(file, data, data_len + crc_len);
+            if (read(file, data, data_len + crc_len))
+            {
+                fprintf(stderr, "Error read data from file %s\n", file_name);
+            }
 
             pthread_mutex_unlock(&deviceAccess);
 
             printf("Decrypted message: %s", data);
-            /* Get char when keypressed. */
-            c = getch();
 
-            /* In case of q or Q char, signal both
-               threads (including this one) to terminate. */
-            if (c == 'q' || c == 'Q')
+            /* Check if sending should stop. */
+            if (stop == 1)
             {
                 /* Terminate thread; Signal the semaphore three times
                 in order to notify all three threads. */
+                sem_post(&semFinishSignal);
                 sem_post(&semFinishSignal);
                 sem_post(&semFinishSignal);
                 sem_post(&semFinishSignal);
@@ -150,6 +157,25 @@ void* sender (void *param)
         }
     }
 
+    return 0;
+}
+    
+void* finish (void* param)
+{
+    while(1)
+    {
+        if (sem_trywait(&semFinishSignal) == 0)
+        {
+            break;
+        }
+        char c = getch();
+        if(c =='q' || c =='Q')
+        {
+            stop = 1;
+        }
+        usleep(50000);
+                
+    }
     return 0;
 }
 
@@ -169,16 +195,17 @@ int main (int argc, char *argv[])
     pthread_t hEncrypter;
     pthread_t hDecrypter;
     pthread_t hSender;
+    pthread_t hFinish;
 
     /* Timer ID. */
     timer_event_t hPrintStateTimer;
 
 
-	if (argc != 2) {
-		fprintf(stderr, "mailbox: wrong number of arguments;\n");
-		fprintf(stderr, "1st argument: error injection {0 | 1} \n");
-		return -1;
-	}
+    if (argc != 2) {
+        fprintf(stderr, "mailbox: wrong number of arguments;\n");
+        fprintf(stderr, "1st argument: error injection {0 | 1} \n");
+        return -1;
+    }
 
     /* Create semEncrypted, semDecrypted, semSent and semFinishSignal semaphores. */
     sem_init(&semEncrypted, 0, 0);
@@ -189,13 +216,14 @@ int main (int argc, char *argv[])
     /* Initialise mutex. */
     pthread_mutex_init(&deviceAccess, NULL);
     if ((file = open("/dev/mailbox", O_RDWR)) < 0){
-		fprintf(stderr, "Error opening file %s\n", argv[1]);
-		return -1;
-  	}
+        fprintf(stderr, "Error opening file %s\n", argv[1]);
+        return -1;
+      }
     /* Create threads: the encrypter, the decrypter and the sender. */
     pthread_create(&hEncrypter, NULL, encrypter, argv[1]);
     pthread_create(&hDecrypter, NULL, decrypter, 0);
     pthread_create(&hSender, NULL, sender, 0);
+    pthread_create(&hFinish, NULL, finish, 0);
 
     /* Create the timer event for send_new_mail callback function. */
     timer_event_set(&hPrintStateTimer, 2000, send_new_mail, 0, TE_KIND_REPETITIVE);

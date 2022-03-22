@@ -72,7 +72,7 @@ int encrypter_major = 60;
 char *encrypter_buffer;
 
 /* Function for calulcation CRC of message */
-static char calculate_crc (char* message, int lenght)
+static char calculate_crc (const char* message, int lenght)
 {
     char sum = 0;
     int i;
@@ -84,18 +84,8 @@ static char calculate_crc (char* message, int lenght)
     return ~sum;
 }
 
-/* Function used to check if CRC macthes with one calculated using passed message */
-static int check_crc (char* message, int length, char crc)
+static int encryptVigenere(const char* in, const char *key, char* out)
 {
-    char sum = calculate_crc(message, length);
-    if (sum == crc)
-    {
-        return 1;
-    }
-    return 0;
-}
-
-static int encryptVigenere(const char* in, const char *key, char* out){
     int inLength = strlen(in);
     int keyLength = strlen(key);
     int i=0, j=0;
@@ -128,7 +118,8 @@ static int encryptVigenere(const char* in, const char *key, char* out){
     return 1;
 }
 
-static int decryptVigenere(const char* in, const char *key, char* out){
+static int decryptVigenere(const char* in, const char *key, char* out)
+{
     int inLength = strlen(in);
     int keyLength = strlen(key);
     int i=0, j=0;
@@ -256,6 +247,7 @@ static int encrypter_release(struct inode *inode, struct file *filp)
 static ssize_t encrypter_read(struct file *filp, char *buf, size_t len, loff_t *f_pos)
 {
     /* Size of valid data in memory - data to send in user space. */
+    int i = 0;
     int data_size = 0;
     int length = 0;
     char crc_sum_encrypted;
@@ -334,7 +326,7 @@ static ssize_t encrypter_read(struct file *filp, char *buf, size_t len, loff_t *
  */
 static ssize_t encrypter_write(struct file *filp, const char *buf, size_t len, loff_t *f_pos)
 {
-    int i = 0;z
+    int i = 0;
     char crc_sum;
     char *crypted_buf;
     char *crc_buf;
