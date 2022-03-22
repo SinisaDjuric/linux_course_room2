@@ -1,6 +1,6 @@
 #embedded linux course
 
-CC:=gcc
+CC:=${CROSS_COMPILE}gcc
 CFLAGS=-O0 -Wall
 LIBS=-lpthread
 INCLUDE=-I include/
