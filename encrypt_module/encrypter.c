@@ -29,11 +29,13 @@ MODULE_DESCRIPTION("Tiny encryption module. The module takes up to 80 "
                     "encryption functionality can be disabled using ioctl "
                     "interface.");
 
-#define BUF_LEN 50
+#define BUF_LEN         52
+#define MAX_MSG_LEN     50
 
 /* Encryption switch */
 int encryption_enable = 1; /* Enable encryption. */
 long error_injection = 0; /* Error injection. */
+char crypt_key[] = "room2";
 
 /* Declaration of encrypter.c functions */
 static int encryptVigenere(const char* in, const char* key, char* out);
@@ -69,59 +71,98 @@ int encrypter_major = 60;
 /* Buffer to store data. */
 char *encrypter_buffer;
 
+/* Function for calulcation CRC of message */
+static char calculate_crc (char* message, int lenght)
+{
+    char sum = 0;
+    int i;
+
+    for (i = 0; i < lenght; ++i)
+    {
+        sum += message[i];
+    }
+    return ~sum;
+}
+
+/* Function used to check if CRC macthes with one calculated using passed message */
+static int check_crc (char* message, int length, char crc)
+{
+    char sum = calculate_crc(message, length);
+    if (sum == crc)
+    {
+        return 1;
+    }
+    return 0;
+}
+
 static int encryptVigenere(const char* in, const char *key, char* out){
-	int inLength = strlen(in);
-	int keyLength = strlen(key);
-	int i=0, j=0;
-	char c;
-	char k;
+    int inLength = strlen(in);
+    int keyLength = strlen(key);
+    int i=0, j=0;
+    char c;
+    char k;
 
-	for(i=0; i<inLength; i++){
-		if(j>=keyLength){
-			j=0;
-		}
-		c = in[i];
-		k = key[j];
-		if((c>='a' && c<='z') || (c>='A' && c<='Z')){
-			c= tolower(c);
-			k= tolower(k);
-			out[i] = ((c -'a') + (key[j] -'a')) % 26 + 'a';
-			j++;
-		}else{
-			out[i] = in[i];
-		}
-	}
+    for(i=0; i<inLength; i++)
+    {
+        if(j>=keyLength)
+        {
+            j=0;
+        }
 
-	return 1;
+        c = in[i];
+        k = key[j];
+
+        if((c>='a' && c<='z') || (c>='A' && c<='Z'))
+        {
+            c= tolower(c);
+            k= tolower(k);
+            out[i] = ((c -'a') + (key[j] -'a')) % 26 + 'a';
+            j++;
+        }
+        else
+        {
+            out[i] = in[i];
+        }
+    }
+
+    return 1;
 }
 
 static int decryptVigenere(const char* in, const char *key, char* out){
-	int inLength = strlen(in);
-	int keyLength = strlen(key);
-	int i=0, j=0;
-	char c;
-	char k;
+    int inLength = strlen(in);
+    int keyLength = strlen(key);
+    int i=0, j=0;
+    char c;
+    char k;
 
-	for(i=0; i<inLength; i++){
-		if(j>=keyLength){
-			j=0;
-		}
-		c = in[i];
-		k = key[j];
-		if((c>='a' && c<='z') || (c>='A' && c<='Z')){
-			c= tolower(c);
-			k= tolower(k);
-			if((c = (c -'a') - (k -'a')) < 0){
-				c += 26;
-			}
-			out[i] = c % 26 + 'a';
-			j++;
-		}else{
-			out[i] = in[i];
-		}
-	}
+    for(i=0; i<inLength; i++)
+    {
+        if(j>=keyLength)
+        {
+            j=0;
+        }
 
-	return 1;
+        c = in[i];
+        k = key[j];
+
+        if((c>='a' && c<='z') || (c>='A' && c<='Z'))
+        {
+            c= tolower(c);
+            k= tolower(k);
+            if((c = (c -'a') - (k -'a')) < 0)
+            {
+                c += 26;
+            }
+            out[i] = c % 26 + 'a';
+            j++;
+        }
+        else
+        {
+            out[i] = in[i];
+        }
+    }
+
+    return 1;
 }
 
 /*
@@ -143,8 +184,6 @@ int encrypter_init(void)
         printk(KERN_INFO "encrypter: cannot obtain major number %d\n", encrypter_major);
         return result;
     }
-
-
 
     /* Allocating memory for the buffer. */
     encrypter_buffer = kmalloc(BUF_LEN, GFP_KERNEL);
@@ -218,14 +257,54 @@ static ssize_t encrypter_read(struct file *filp, char *buf, size_t len, loff_t *
 {
     /* Size of valid data in memory - data to send in user space. */
     int data_size = 0;
+    int length = 0;
+    char crc_sum_encrypted;
+    char crc_sum_decrypted;
+    char *decrypted_buf;
+    char *message;
+
+    /* Allocating memory for the crypted and crc buffers. */
+    decrypted_buf = kmalloc(BUF_LEN, GFP_KERNEL);
+    message = kmalloc(BUF_LEN, GFP_KERNEL);
+    memset(decrypted_buf, 0, BUF_LEN);
+    memset(message, 0, BUF_LEN);
 
     if (*f_pos == 0)
     {
         /* Get size of valid data. */
         data_size = strlen(encrypter_buffer);
 
+        if(!encryption_enable)
+        {
+            /* Decrypt received data. */
+            decryptVigenere(encrypter_buffer, crypt_key, decrypted_buf);
+            /* Get length and crc. */
+            length = (int)decrypted_buf[0];
+            crc_sum_encrypted = decrypted_buf[1];
+
+            for (i = 0; i < data_size - 2; i++)
+            {
+                message[i] = decrypted_buf[i+2];
+            }
+            /* Calculate CRC. */
+            crc_sum_decrypted = calculate_crc(message, data_size - 2);
+            /* Check CRC */
+            if (crc_sum_decrypted == crc_sum_encrypted)
+            {
+                 printk(KERN_INFO "CRC sum match\n");
+            }
+            else
+            {
+                 printk(KERN_INFO "CRC sum mismatch\n");
+            }
+        }
+        else
+        {
+            memcpy(encrypter_buffer, message, BUF_LEN);
+        }
+
         /* Send data to user space. */
-        if (copy_to_user(buf, encrypter_buffer, data_size) != 0)
+        if (copy_to_user(buf, message, data_size) != 0)
         {
             return -EFAULT;
         }
@@ -255,26 +334,56 @@ static ssize_t encrypter_read(struct file *filp, char *buf, size_t len, loff_t *
  */
 static ssize_t encrypter_write(struct file *filp, const char *buf, size_t len, loff_t *f_pos)
 {
-    int i = 0;
+    int i = 0;z
+    char crc_sum;
+    char *crypted_buf;
+    char *crc_buf;
+    ssize_t ret = 0;
 
     /* Reset memory. */
     memset(encrypter_buffer, 0, BUF_LEN);
+    /* Allocating memory for the crypted and crc buffers. */
+    crypted_buf = kmalloc(BUF_LEN, GFP_KERNEL);
+    crc_buf = kmalloc(BUF_LEN, GFP_KERNEL);
+    memset(crypted_buf, 0, BUF_LEN);
+    memset(crc_buf, 0, BUF_LEN);
+
+    if(encryption_enable)
+    {
+        /* Add crc */
+        crc_sum = calculate_crc(buf, len);
+        crc_buf[0] = (char)len;
+        crc_buf[1] = crc_sum;
+        for (i = 0; i < len; i++)
+        {
+            crc_buf[i+2] = crypted_buf[i];
+        }
+        crc_buf[len] = '\0';
+        /* Encrypt received data. */
+        encryptVigenere(crc_buf, crypt_key, crypted_buf);
+    }
+    
+    /* Added error injection */
+    if (error_injection == ERROR_INJECTION)
+    { 
+        crypted_buf[len-2] = ~crypted_buf[len-2];
+    }
 
     /* Get data from user space.*/
-    if (copy_from_user(encrypter_buffer, buf, len) != 0)
+    if (copy_from_user(encrypter_buffer, crypted_buf, len) != 0)
     {
-        return -EFAULT;
+        ret = -EFAULT;
     }
     else
     {
-        if(encryption_enable){
-                /* Encrypt received data. */      	
-                for(i=0; i < len; ++i){
-                    encrypter_buffer[i] = ~encrypter_buffer[i];
-                }
-        }
-        return len;
+        ret = len;
     }
+    
+    /* Free crypted and crc buffers. */
+    kfree(crypted_buf);
+    kfree(crc_buf);
+
+    return ret;
 }
 
 /* Encryption switch controller
@@ -289,16 +398,12 @@ static ssize_t encrypter_write(struct file *filp, const char *buf, size_t len, l
  *
  * NOTE: After changes the current data in the buffer MUST be discarded.
  */
-static long encrypter_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
-    int i = 0;
-	encryption_enable = cmd;
-	error_injection = arg;
+static long encrypter_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    encryption_enable = cmd;
+    error_injection = arg;
+
     printk(KERN_INFO "Encryption enable updated\n");
-     if (arg == ERROR_INJECTION){
-         for(i=0; i < BUF_LEN; ++i){
-            encrypter_buffer[i] = ~encrypter_buffer[i];
-        }
-    }
-    
-	return 0;
+
+    return 0;
 }
